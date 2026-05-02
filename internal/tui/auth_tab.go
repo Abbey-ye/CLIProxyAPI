@@ -254,14 +254,9 @@ func (m authTabModel) renderContent() string {
 func (m authTabModel) renderDetail(f map[string]any) string {
 	var sb strings.Builder
 
-	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("111")).
-		Bold(true)
-	valueStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252"))
-	editableMarker := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("214")).
-		Render(" ✎")
+	labelStyle := authDetailLabelStyle()
+	valueStyle := authDetailValueStyle()
+	editableMarker := authDetailEditMarker()
 
 	sb.WriteString("    ┌─────────────────────────────────────────────\n")
 

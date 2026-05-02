@@ -20,11 +20,39 @@ var (
 	colorHighlight = lipgloss.Color("#F5C2E7") // pink highlight
 )
 
+var tuiTheme = struct {
+	textOnPrimary     lipgloss.Color
+	cardBorder        lipgloss.Color
+	metricAPIKeys     lipgloss.Color
+	metricAuthFiles   lipgloss.Color
+	urlText           lipgloss.Color
+	detailLabel       lipgloss.Color
+	detailValue       lipgloss.Color
+	detailEditMarker  lipgloss.Color
+	defaultCardWidth  int
+	minimumCardWidth  int
+	labelWidth        int
+	defaultInputLimit int
+}{
+	textOnPrimary:     lipgloss.Color("#FFFFFF"),
+	cardBorder:        lipgloss.Color("240"),
+	metricAPIKeys:     lipgloss.Color("111"),
+	metricAuthFiles:   lipgloss.Color("76"),
+	urlText:           lipgloss.Color("252"),
+	detailLabel:       lipgloss.Color("111"),
+	detailValue:       lipgloss.Color("252"),
+	detailEditMarker:  lipgloss.Color("214"),
+	defaultCardWidth:  25,
+	minimumCardWidth:  18,
+	labelWidth:        24,
+	defaultInputLimit: 2048,
+}
+
 // Tab bar styles
 var (
 	tabActiveStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#FFFFFF")).
+			Foreground(tuiTheme.textOnPrimary).
 			Background(colorPrimary).
 			Padding(0, 2)
 
@@ -53,7 +81,7 @@ var (
 	labelStyle = lipgloss.NewStyle().
 			Foreground(colorInfo).
 			Bold(true).
-			Width(24)
+			Width(tuiTheme.labelWidth)
 
 	valueStyle = lipgloss.NewStyle().
 			Foreground(colorText)
@@ -105,10 +133,58 @@ var (
 			PaddingRight(2)
 
 	tableSelectedStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FFFFFF")).
+				Foreground(tuiTheme.textOnPrimary).
 				Background(colorPrimary).
 				Bold(true)
 )
+
+func dashboardCardWidth(viewWidth int) int {
+	cardWidth := tuiTheme.defaultCardWidth
+	if viewWidth > 0 {
+		cardWidth = (viewWidth - 2) / 2
+		if cardWidth < tuiTheme.minimumCardWidth {
+			cardWidth = tuiTheme.minimumCardWidth
+		}
+	}
+	return cardWidth
+}
+
+func dashboardCardStyle(width int) lipgloss.Style {
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(tuiTheme.cardBorder).
+		Padding(0, 1).
+		Width(width).
+		Height(2)
+}
+
+func metricValueStyle(accent lipgloss.Color) lipgloss.Style {
+	return lipgloss.NewStyle().Bold(true).Foreground(accent)
+}
+
+func selectedPillStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Bold(true).
+		Foreground(tuiTheme.textOnPrimary).
+		Background(colorPrimary).
+		Padding(0, 1)
+}
+
+func inputPrompt(label string) string {
+	return "  " + label + ": "
+}
+
+func authDetailLabelStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(tuiTheme.detailLabel).Bold(true)
+}
+
+func authDetailValueStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(tuiTheme.detailValue)
+}
+
+func authDetailEditMarker() string {
+	return lipgloss.NewStyle().Foreground(tuiTheme.detailEditMarker).Render(" ✎")
+}
 
 func logLevelStyle(level string) lipgloss.Style {
 	switch level {

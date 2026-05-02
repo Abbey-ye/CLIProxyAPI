@@ -54,7 +54,7 @@ type keyActionMsg struct {
 func newKeysTabModel(client *Client) keysTabModel {
 	ti := textinput.New()
 	ti.CharLimit = 512
-	ti.Prompt = "  Key: "
+	ti.Prompt = inputPrompt(T("key_prompt_label"))
 	return keysTabModel{
 		client:    client,
 		confirm:   -1,
@@ -85,6 +85,13 @@ func (m keysTabModel) fetchKeys() tea.Msg {
 func (m keysTabModel) Update(msg tea.Msg) (keysTabModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case localeChangedMsg:
+		if m.adding {
+			m.editInput.Prompt = T("new_key_prompt")
+		} else if m.editing {
+			m.editInput.Prompt = T("edit_key_prompt")
+		} else {
+			m.editInput.Prompt = inputPrompt(T("key_prompt_label"))
+		}
 		m.viewport.SetContent(m.renderContent())
 		return m, nil
 	case keysDataMsg:

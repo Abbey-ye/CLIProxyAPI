@@ -332,17 +332,7 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 	body = helps.ApplyPayloadConfigWithRoot(e.cfg, baseModel, to.String(), "", body, originalTranslated, requestedModel, requestPath)
 	body, _ = sjson.SetBytes(body, "model", baseModel)
 	body, _ = sjson.DeleteBytes(body, "stream")
-	body = normalizeCodexInstructions(body)
-	if e.cfg == nil || e.cfg.DisableImageGeneration == config.DisableImageGenerationOff {
-		body = ensureImageGenerationTool(body, baseModel, auth)
-	}
-
 	url := strings.TrimSuffix(baseURL, "/") + "/responses/compact"
-	httpReq, err := e.cacheHelper(ctx, from, url, req, body)
-	if err != nil {
-		return resp, err
-	}
-	applyCodexHeaders(httpReq, auth, apiKey, false, e.cfg)
 	var authID, authLabel, authType, authValue string
 	if auth != nil {
 		authID = auth.ID
@@ -361,36 +351,81 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 		AuthValue: authValue,
 	})
 	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	data, headers, statusCode, err := e.executeCompactRequest(ctx, httpClient, auth, apiKey, from, url, req, body)
+	if err != nil {
+		var status statusErr
+		if errors.As(err, &status) && shouldRetryCodexCompactCompatibility(status.code, []byte(status.msg)) {
+			compatBody := applyCodexCompactCompatibility(body, baseModel, auth, e.cfg)
+			if !bytes.Equal(compatBody, body) {
+				helps.RecordAPIRequest(ctx, e.cfg, helps.UpstreamRequestLog{
+					URL:       url,
+					Method:    http.MethodPost,
+					Headers:   map[string][]string{"X-CliProxy-Compatibility-Retry": {"codex-compact"}},
+					Body:      compatBody,
+					Provider:  e.Identifier(),
+					AuthID:    authID,
+					AuthLabel: authLabel,
+					AuthType:  authType,
+					AuthValue: authValue,
+				})
+				data, headers, statusCode, err = e.executeCompactRequest(ctx, httpClient, auth, apiKey, from, url, req, compatBody)
+				if err != nil {
+					return resp, err
+				}
+				body = compatBody
+			} else {
+				return resp, err
+			}
+		} else {
+			return resp, err
+		}
+	}
+	helps.RecordAPIResponseMetadata(ctx, e.cfg, statusCode, headers.Clone())
+	helps.AppendAPIResponseChunk(ctx, e.cfg, data)
+	reporter.Publish(ctx, helps.ParseOpenAIUsage(data))
+	reporter.EnsurePublished(ctx)
+	var param any
+	out := sdktranslator.TranslateNonStream(ctx, to, from, req.Model, originalPayload, body, data, &param)
+	resp = cliproxyexecutor.Response{Payload: out, Headers: headers.Clone()}
+	return resp, nil
+}
+
+func (e *CodexExecutor) executeCompactRequest(
+	ctx context.Context,
+	httpClient *http.Client,
+	auth *cliproxyauth.Auth,
+	apiKey string,
+	from sdktranslator.Translator,
+	url string,
+	req cliproxyexecutor.Request,
+	body []byte,
+) ([]byte, http.Header, int, error) {
+	httpReq, err := e.cacheHelper(ctx, from, url, req, body)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	applyCodexHeaders(httpReq, auth, apiKey, false, e.cfg)
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
-		return resp, err
+		return nil, nil, 0, err
 	}
 	defer func() {
 		if errClose := httpResp.Body.Close(); errClose != nil {
 			log.Errorf("codex executor: close response body error: %v", errClose)
 		}
 	}()
-	helps.RecordAPIResponseMetadata(ctx, e.cfg, httpResp.StatusCode, httpResp.Header.Clone())
-	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
-		b, _ := io.ReadAll(httpResp.Body)
-		helps.AppendAPIResponseChunk(ctx, e.cfg, b)
-		helps.LogWithRequestID(ctx).Debugf("request error, error status: %d, error message: %s", httpResp.StatusCode, helps.SummarizeErrorBody(httpResp.Header.Get("Content-Type"), b))
-		err = newCodexStatusErr(httpResp.StatusCode, b)
-		return resp, err
-	}
-	data, err := io.ReadAll(httpResp.Body)
+	bodyBytes, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
-		return resp, err
+		return nil, nil, httpResp.StatusCode, err
 	}
-	helps.AppendAPIResponseChunk(ctx, e.cfg, data)
-	reporter.Publish(ctx, helps.ParseOpenAIUsage(data))
-	reporter.EnsurePublished(ctx)
-	var param any
-	out := sdktranslator.TranslateNonStream(ctx, to, from, req.Model, originalPayload, body, data, &param)
-	resp = cliproxyexecutor.Response{Payload: out, Headers: httpResp.Header.Clone()}
-	return resp, nil
+	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
+		helps.AppendAPIResponseChunk(ctx, e.cfg, bodyBytes)
+		helps.LogWithRequestID(ctx).Debugf("request error, error status: %d, error message: %s", httpResp.StatusCode, helps.SummarizeErrorBody(httpResp.Header.Get("Content-Type"), bodyBytes))
+		return nil, httpResp.Header.Clone(), httpResp.StatusCode, newCodexStatusErr(httpResp.StatusCode, bodyBytes)
+	}
+	return bodyBytes, httpResp.Header.Clone(), httpResp.StatusCode, nil
 }
 
 func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (_ *cliproxyexecutor.StreamResult, err error) {
@@ -881,6 +916,33 @@ func normalizeCodexInstructions(body []byte) []byte {
 		body, _ = sjson.SetBytes(body, "instructions", "")
 	}
 	return body
+}
+
+func applyCodexCompactCompatibility(body []byte, baseModel string, auth *cliproxyauth.Auth, cfg *config.Config) []byte {
+	compatBody := body
+	if gjson.GetBytes(compatBody, "context_management").Exists() {
+		compatBody, _ = sjson.DeleteBytes(compatBody, "context_management")
+	}
+	compatBody = normalizeCodexInstructions(compatBody)
+	if cfg == nil || cfg.DisableImageGeneration == config.DisableImageGenerationOff {
+		compatBody = ensureImageGenerationTool(compatBody, baseModel, auth)
+	}
+	return compatBody
+}
+
+func shouldRetryCodexCompactCompatibility(statusCode int, body []byte) bool {
+	if statusCode != http.StatusBadRequest || len(body) == 0 {
+		return false
+	}
+	lower := strings.ToLower(strings.TrimSpace(string(body)))
+	if strings.Contains(lower, "unsupported parameter: context_management") {
+		return true
+	}
+	message := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "error.message").String()))
+	if message == "" {
+		message = strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "message").String()))
+	}
+	return strings.Contains(message, "unsupported parameter: context_management")
 }
 
 var imageGenToolJSON = []byte(`{"type":"image_generation","output_format":"png"}`)

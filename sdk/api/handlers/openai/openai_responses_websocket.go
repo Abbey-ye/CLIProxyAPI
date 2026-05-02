@@ -43,6 +43,13 @@ var responsesWebsocketUpgrader = websocket.Upgrader{
 	},
 }
 
+func websocketLoggingContext(c *gin.Context) context.Context {
+	if c == nil || c.Request == nil {
+		return context.Background()
+	}
+	return context.WithValue(c.Request.Context(), "gin", c)
+}
+
 // ResponsesWebsocket handles websocket requests for /v1/responses.
 // It accepts `response.create` and `response.append` requests and streams
 // response events back as JSON websocket text messages.
@@ -126,7 +133,7 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			allowIncrementalInputWithPreviousResponseID,
 		)
 		if errMsg != nil {
-			h.LoggingAPIResponseError(context.WithValue(context.Background(), "gin", c), errMsg)
+			h.LoggingAPIResponseError(websocketLoggingContext(c), errMsg)
 			markAPIResponseTimestamp(c)
 			errorPayload, errWrite := writeResponsesWebsocketError(conn, &wsTimelineLog, errMsg)
 			log.Infof(
@@ -304,12 +311,6 @@ func normalizeResponseSubsequentRequest(rawJSON []byte, lastRequest []byte, last
 					normalized, _ = sjson.SetBytes(normalized, "model", modelName)
 				}
 			}
-			if !gjson.GetBytes(normalized, "instructions").Exists() {
-				instructions := gjson.GetBytes(lastRequest, "instructions")
-				if instructions.Exists() {
-					normalized, _ = sjson.SetRawBytes(normalized, "instructions", []byte(instructions.Raw))
-				}
-			}
 			normalized, _ = sjson.SetBytes(normalized, "stream", true)
 			return normalized, bytes.Clone(normalized), nil
 		}
@@ -355,12 +356,6 @@ func normalizeResponseSubsequentRequest(rawJSON []byte, lastRequest []byte, last
 			normalized, _ = sjson.SetBytes(normalized, "model", modelName)
 		}
 	}
-	if !gjson.GetBytes(normalized, "instructions").Exists() {
-		instructions := gjson.GetBytes(lastRequest, "instructions")
-		if instructions.Exists() {
-			normalized, _ = sjson.SetRawBytes(normalized, "instructions", []byte(instructions.Raw))
-		}
-	}
 	normalized, _ = sjson.SetBytes(normalized, "stream", true)
 	return normalized, bytes.Clone(normalized), nil
 }
@@ -402,12 +397,6 @@ func normalizeResponseTranscriptReplacement(rawJSON []byte, lastRequest []byte) 
 		modelName := strings.TrimSpace(gjson.GetBytes(lastRequest, "model").String())
 		if modelName != "" {
 			normalized, _ = sjson.SetBytes(normalized, "model", modelName)
-		}
-	}
-	if !gjson.GetBytes(normalized, "instructions").Exists() {
-		instructions := gjson.GetBytes(lastRequest, "instructions")
-		if instructions.Exists() {
-			normalized, _ = sjson.SetRawBytes(normalized, "instructions", []byte(instructions.Raw))
 		}
 	}
 	normalized, _ = sjson.SetBytes(normalized, "stream", true)
@@ -730,7 +719,7 @@ func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
 				continue
 			}
 			if errMsg != nil {
-				h.LoggingAPIResponseError(context.WithValue(context.Background(), "gin", c), errMsg)
+				h.LoggingAPIResponseError(websocketLoggingContext(c), errMsg)
 				markAPIResponseTimestamp(c)
 				errorPayload, errWrite := writeResponsesWebsocketError(conn, wsTimelineLog, errMsg)
 				log.Infof(
@@ -764,7 +753,7 @@ func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
 						StatusCode: http.StatusRequestTimeout,
 						Error:      fmt.Errorf("stream closed before response.completed"),
 					}
-					h.LoggingAPIResponseError(context.WithValue(context.Background(), "gin", c), errMsg)
+					h.LoggingAPIResponseError(websocketLoggingContext(c), errMsg)
 					markAPIResponseTimestamp(c)
 					errorPayload, errWrite := writeResponsesWebsocketError(conn, wsTimelineLog, errMsg)
 					log.Infof(

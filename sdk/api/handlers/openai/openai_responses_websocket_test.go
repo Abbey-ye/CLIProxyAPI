@@ -262,8 +262,8 @@ func TestNormalizeResponsesWebsocketRequestWithPreviousResponseIDIncremental(t *
 	if gjson.GetBytes(normalized, "model").String() != "test-model" {
 		t.Fatalf("unexpected model: %s", gjson.GetBytes(normalized, "model").String())
 	}
-	if gjson.GetBytes(normalized, "instructions").String() != "be helpful" {
-		t.Fatalf("unexpected instructions: %s", gjson.GetBytes(normalized, "instructions").String())
+	if gjson.GetBytes(normalized, "instructions").Exists() {
+		t.Fatalf("instructions should not be backfilled from last request: %s", gjson.GetBytes(normalized, "instructions").Raw)
 	}
 	if !bytes.Equal(next, normalized) {
 		t.Fatalf("next request snapshot should match normalized request")

@@ -132,26 +132,14 @@ func (m dashboardModel) renderDashboard(cfg map[string]any, authFiles []map[stri
 	sb.WriteString("\n\n")
 
 	// ━━━ Stats Cards ━━━
-	cardWidth := 25
-	if m.width > 0 {
-		cardWidth = (m.width - 2) / 2
-		if cardWidth < 18 {
-			cardWidth = 18
-		}
-	}
-
-	cardStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Padding(0, 1).
-		Width(cardWidth).
-		Height(2)
+	cardWidth := dashboardCardWidth(m.width)
+	cardStyle := dashboardCardStyle(cardWidth)
 
 	// Card 1: API Keys
 	keyCount := len(apiKeys)
 	card1 := cardStyle.Render(fmt.Sprintf(
 		"%s\n%s",
-		lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("111")).Render(fmt.Sprintf("🔑 %d", keyCount)),
+		metricValueStyle(tuiTheme.metricAPIKeys).Render(fmt.Sprintf("🔑 %d", keyCount)),
 		lipgloss.NewStyle().Foreground(colorMuted).Render(T("mgmt_keys")),
 	))
 
@@ -165,7 +153,7 @@ func (m dashboardModel) renderDashboard(cfg map[string]any, authFiles []map[stri
 	}
 	card2 := cardStyle.Render(fmt.Sprintf(
 		"%s\n%s",
-		lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("76")).Render(fmt.Sprintf("📄 %d", authCount)),
+		metricValueStyle(tuiTheme.metricAuthFiles).Render(fmt.Sprintf("📄 %d", authCount)),
 		lipgloss.NewStyle().Foreground(colorMuted).Render(fmt.Sprintf("%s (%d %s)", T("auth_files_label"), activeAuth, T("active_suffix"))),
 	))
 

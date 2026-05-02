@@ -13,17 +13,18 @@ import (
 
 // oauthProvider represents an OAuth provider option.
 type oauthProvider struct {
+	key     string
 	name    string
 	apiPath string // management API path
 	emoji   string
 }
 
 var oauthProviders = []oauthProvider{
-	{"Gemini CLI", "gemini-cli-auth-url", "🟦"},
-	{"Claude (Anthropic)", "anthropic-auth-url", "🟧"},
-	{"Codex (OpenAI)", "codex-auth-url", "🟩"},
-	{"Antigravity", "antigravity-auth-url", "🟪"},
-	{"Kimi", "kimi-auth-url", "🟫"},
+	{"gemini", "Gemini CLI", "gemini-cli-auth-url", "🟦"},
+	{"anthropic", "Claude (Anthropic)", "anthropic-auth-url", "🟧"},
+	{"codex", "Codex (OpenAI)", "codex-auth-url", "🟩"},
+	{"antigravity", "Antigravity", "antigravity-auth-url", "🟪"},
+	{"kimi", "Kimi", "kimi-auth-url", "🟫"},
 }
 
 // oauthTabModel handles OAuth login flows.
@@ -42,6 +43,7 @@ type oauthTabModel struct {
 	authURL       string // auth URL to display
 	authState     string // OAuth state parameter
 	providerName  string // current provider name
+	providerKey   string // canonical provider key
 	callbackInput textinput.Model
 	inputActive   bool // true when user is typing callback URL
 }
@@ -61,6 +63,7 @@ type oauthStartMsg struct {
 	url          string
 	state        string
 	providerName string
+	providerKey  string
 	err          error
 }
 
@@ -76,13 +79,17 @@ type oauthCallbackSubmitMsg struct {
 
 func newOAuthTabModel(client *Client) oauthTabModel {
 	ti := textinput.New()
-	ti.Placeholder = "http://localhost:.../auth/callback?code=...&state=..."
-	ti.CharLimit = 2048
-	ti.Prompt = "  回调 URL: "
+	configureOAuthCallbackInput(&ti)
 	return oauthTabModel{
 		client:        client,
 		callbackInput: ti,
 	}
+}
+
+func configureOAuthCallbackInput(input *textinput.Model) {
+	input.Placeholder = T("oauth_callback_placeholder")
+	input.CharLimit = tuiTheme.defaultInputLimit
+	input.Prompt = inputPrompt(T("oauth_callback_prompt_label"))
 }
 
 func (m oauthTabModel) Init() tea.Cmd {
@@ -92,6 +99,7 @@ func (m oauthTabModel) Init() tea.Cmd {
 func (m oauthTabModel) Update(msg tea.Msg) (oauthTabModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case localeChangedMsg:
+		configureOAuthCallbackInput(&m.callbackInput)
 		m.viewport.SetContent(m.renderContent())
 		return m, nil
 	case oauthStartMsg:
@@ -105,6 +113,7 @@ func (m oauthTabModel) Update(msg tea.Msg) (oauthTabModel, tea.Cmd) {
 		m.authURL = msg.url
 		m.authState = msg.state
 		m.providerName = msg.providerName
+		m.providerKey = msg.providerKey
 		m.state = oauthRemote
 		m.callbackInput.SetValue("")
 		m.callbackInput.Focus()
@@ -258,35 +267,14 @@ func (m oauthTabModel) startOAuth(provider oauthProvider) tea.Cmd {
 		// Try to open browser (best effort)
 		_ = openBrowser(authURL)
 
-		return oauthStartMsg{url: authURL, state: state, providerName: provider.name}
+		return oauthStartMsg{url: authURL, state: state, providerName: provider.name, providerKey: provider.key}
 	}
 }
 
 func (m oauthTabModel) submitCallback(callbackURL string) tea.Cmd {
 	return func() tea.Msg {
-		// Determine provider from current context
-		providerKey := ""
-		for _, p := range oauthProviders {
-			if p.name == m.providerName {
-				// Map provider name to the canonical key the API expects
-				switch p.apiPath {
-				case "gemini-cli-auth-url":
-					providerKey = "gemini"
-				case "anthropic-auth-url":
-					providerKey = "anthropic"
-				case "codex-auth-url":
-					providerKey = "codex"
-				case "antigravity-auth-url":
-					providerKey = "antigravity"
-				case "kimi-auth-url":
-					providerKey = "kimi"
-				}
-				break
-			}
-		}
-
 		body := map[string]string{
-			"provider":     providerKey,
+			"provider":     m.providerKey,
 			"redirect_url": callbackURL,
 			"state":        m.authState,
 		}
@@ -392,7 +380,7 @@ func (m oauthTabModel) renderContent() string {
 
 		label := fmt.Sprintf("%s %s", p.emoji, p.name)
 		if isSelected {
-			label = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF")).Background(colorPrimary).Padding(0, 1).Render(label)
+			label = selectedPillStyle().Render(label)
 		} else {
 			label = lipgloss.NewStyle().Foreground(colorText).Padding(0, 1).Render(label)
 		}
@@ -418,7 +406,7 @@ func (m oauthTabModel) renderRemoteMode() string {
 	sb.WriteString("\n")
 
 	// Wrap URL to fit terminal width
-	urlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	urlStyle := lipgloss.NewStyle().Foreground(tuiTheme.urlText)
 	maxURLWidth := m.width - 6
 	if maxURLWidth < 40 {
 		maxURLWidth = 40
