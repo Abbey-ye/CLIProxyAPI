@@ -292,7 +292,7 @@ func (m configTabModel) renderContent() string {
 		labelStr := lipgloss.NewStyle().
 			Foreground(colorInfo).
 			Bold(isSelected).
-			Width(32).
+			Width(configLabelWidth(m.width)).
 			Render(f.label)
 
 		var valueStr string

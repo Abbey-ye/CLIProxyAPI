@@ -333,6 +333,22 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 	body = helps.ApplyPayloadConfigWithRoot(e.cfg, baseModel, to.String(), "", body, originalTranslated, requestedModel, requestPath)
 	body, _ = sjson.SetBytes(body, "model", baseModel)
 	body, _ = sjson.DeleteBytes(body, "stream")
+	// Ensure compact response includes reasoning encrypted content for multi-turn continuity.
+	if !gjson.GetBytes(body, "include").Exists() {
+		body, _ = sjson.SetBytes(body, "include", []string{"reasoning.encrypted_content"})
+	} else {
+		hasReasoningInclude := false
+		gjson.GetBytes(body, "include").ForEach(func(_, v gjson.Result) bool {
+			if v.String() == "reasoning.encrypted_content" {
+				hasReasoningInclude = true
+				return false
+			}
+			return true
+		})
+		if !hasReasoningInclude {
+			body, _ = sjson.SetRawBytes(body, "include.-1", []byte(`"reasoning.encrypted_content"`))
+		}
+	}
 	url := strings.TrimSuffix(baseURL, "/") + "/responses/compact"
 	var authID, authLabel, authType, authValue string
 	if auth != nil {

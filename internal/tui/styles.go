@@ -138,6 +138,20 @@ var (
 				Bold(true)
 )
 
+func configLabelWidth(viewWidth int) int {
+	if viewWidth > 0 {
+		w := viewWidth / 3
+		if w > 32 {
+			w = 32
+		}
+		if w < 20 {
+			w = 20
+		}
+		return w
+	}
+	return 32
+}
+
 func dashboardCardWidth(viewWidth int) int {
 	cardWidth := tuiTheme.defaultCardWidth
 	if viewWidth > 0 {

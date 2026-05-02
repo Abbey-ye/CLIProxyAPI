@@ -208,17 +208,45 @@ func (m authTabModel) renderContent() string {
 			rowStyle = lipgloss.NewStyle().Bold(true)
 		}
 
-		displayName := name
-		if len(displayName) > 24 {
-			displayName = displayName[:21] + "..."
+		// Calculate adaptive column widths based on terminal width.
+		// Fixed overhead: cursor(2) + statusIcon(2) + separators(3) = 7 chars.
+		available := m.width - 7
+		if available < 40 {
+			available = 40
 		}
-		displayEmail := email
-		if len(displayEmail) > 28 {
-			displayEmail = displayEmail[:25] + "..."
+		nameW := available * 25 / 100
+		if nameW > 24 {
+			nameW = 24
+		}
+		if nameW < 10 {
+			nameW = 10
+		}
+		chanW := available * 15 / 100
+		if chanW > 12 {
+			chanW = 12
+		}
+		if chanW < 6 {
+			chanW = 6
+		}
+		emailW := available * 35 / 100
+		if emailW > 30 {
+			emailW = 30
+		}
+		if emailW < 12 {
+			emailW = 12
 		}
 
-		row := fmt.Sprintf("%s%s %-24s %-12s %-28s %s",
-			cursor, statusIcon, displayName, channel, displayEmail, statusText)
+		displayName := name
+		if len(displayName) > nameW {
+			displayName = displayName[:nameW-3] + "..."
+		}
+		displayEmail := email
+		if len(displayEmail) > emailW {
+			displayEmail = displayEmail[:emailW-3] + "..."
+		}
+
+		fmtStr := fmt.Sprintf("%%s%%s %%-%ds %%-%ds %%-%ds %%s", nameW, chanW, emailW)
+		row := fmt.Sprintf(fmtStr, cursor, statusIcon, displayName, channel, displayEmail, statusText)
 		sb.WriteString(rowStyle.Render(row))
 		sb.WriteString("\n")
 

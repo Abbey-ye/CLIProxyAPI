@@ -71,6 +71,17 @@ func TestCodexExecutorCompactKeepsOriginalPayload(t *testing.T) {
 			if gjson.GetBytes(gotBody, "tools.0.type").String() == "image_generation" {
 				t.Fatalf("image_generation tool should not be injected into compact passthrough body: %s", string(gotBody))
 			}
+			hasReasoningInclude := false
+			gjson.GetBytes(gotBody, "include").ForEach(func(_, v gjson.Result) bool {
+				if v.String() == "reasoning.encrypted_content" {
+					hasReasoningInclude = true
+					return false
+				}
+				return true
+			})
+			if !hasReasoningInclude {
+				t.Fatalf("compact request should include reasoning.encrypted_content, got %s", string(gotBody))
+			}
 			if string(resp.Payload) != `{"id":"resp_1","object":"response.compaction","usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}` {
 				t.Fatalf("payload = %s", string(resp.Payload))
 			}
@@ -126,6 +137,20 @@ func TestCodexExecutorCompactRetriesCompatibilityForUnsupportedContextManagement
 	}
 	if gjson.GetBytes(firstBody, "instructions").Exists() {
 		t.Fatalf("first request should not inject instructions: %s", string(firstBody))
+	}
+	hasReasoningInclude := func(body []byte) bool {
+		found := false
+		gjson.GetBytes(body, "include").ForEach(func(_, v gjson.Result) bool {
+			if v.String() == "reasoning.encrypted_content" {
+				found = true
+				return false
+			}
+			return true
+		})
+		return found
+	}
+	if !hasReasoningInclude(firstBody) {
+		t.Fatalf("first request should include reasoning.encrypted_content: %s", string(firstBody))
 	}
 	if gjson.GetBytes(secondBody, "context_management").Exists() {
 		t.Fatalf("second request should remove context_management: %s", string(secondBody))
