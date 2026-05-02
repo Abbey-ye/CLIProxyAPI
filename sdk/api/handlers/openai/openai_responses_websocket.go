@@ -311,6 +311,12 @@ func normalizeResponseSubsequentRequest(rawJSON []byte, lastRequest []byte, last
 					normalized, _ = sjson.SetBytes(normalized, "model", modelName)
 				}
 			}
+			if !gjson.GetBytes(normalized, "instructions").Exists() {
+				instructions := gjson.GetBytes(lastRequest, "instructions")
+				if instructions.Exists() {
+					normalized, _ = sjson.SetRawBytes(normalized, "instructions", []byte(instructions.Raw))
+				}
+			}
 			normalized, _ = sjson.SetBytes(normalized, "stream", true)
 			return normalized, bytes.Clone(normalized), nil
 		}
@@ -356,6 +362,12 @@ func normalizeResponseSubsequentRequest(rawJSON []byte, lastRequest []byte, last
 			normalized, _ = sjson.SetBytes(normalized, "model", modelName)
 		}
 	}
+	if !gjson.GetBytes(normalized, "instructions").Exists() {
+		instructions := gjson.GetBytes(lastRequest, "instructions")
+		if instructions.Exists() {
+			normalized, _ = sjson.SetRawBytes(normalized, "instructions", []byte(instructions.Raw))
+		}
+	}
 	normalized, _ = sjson.SetBytes(normalized, "stream", true)
 	return normalized, bytes.Clone(normalized), nil
 }
@@ -397,6 +409,12 @@ func normalizeResponseTranscriptReplacement(rawJSON []byte, lastRequest []byte) 
 		modelName := strings.TrimSpace(gjson.GetBytes(lastRequest, "model").String())
 		if modelName != "" {
 			normalized, _ = sjson.SetBytes(normalized, "model", modelName)
+		}
+	}
+	if !gjson.GetBytes(normalized, "instructions").Exists() {
+		instructions := gjson.GetBytes(lastRequest, "instructions")
+		if instructions.Exists() {
+			normalized, _ = sjson.SetRawBytes(normalized, "instructions", []byte(instructions.Raw))
 		}
 	}
 	normalized, _ = sjson.SetBytes(normalized, "stream", true)
