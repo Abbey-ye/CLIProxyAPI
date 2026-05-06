@@ -12,7 +12,7 @@ type bufferedConn struct {
 }
 
 func (c *bufferedConn) Read(p []byte) (int, error) {
-	if c == nil {
+	if c == nil || c.Conn == nil {
 		return 0, net.ErrClosed
 	}
 	if c.reader == nil {

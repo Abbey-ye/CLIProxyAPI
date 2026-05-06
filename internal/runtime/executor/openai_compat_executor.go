@@ -18,6 +18,7 @@ import (
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator"
 	log "github.com/sirupsen/logrus"
+	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
 
@@ -102,6 +103,22 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 	if opts.Alt == "responses/compact" {
 		if updated, errDelete := sjson.DeleteBytes(translated, "stream"); errDelete == nil {
 			translated = updated
+		}
+		// Ensure compact response includes reasoning encrypted content for multi-turn continuity.
+		if !gjson.GetBytes(translated, "include").Exists() {
+			translated, _ = sjson.SetBytes(translated, "include", []string{"reasoning.encrypted_content"})
+		} else {
+			hasReasoningInclude := false
+			gjson.GetBytes(translated, "include").ForEach(func(_, v gjson.Result) bool {
+				if v.String() == "reasoning.encrypted_content" {
+					hasReasoningInclude = true
+					return false
+				}
+				return true
+			})
+			if !hasReasoningInclude {
+				translated, _ = sjson.SetRawBytes(translated, "include.-1", []byte(`"reasoning.encrypted_content"`))
+			}
 		}
 	}
 

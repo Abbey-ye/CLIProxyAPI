@@ -955,7 +955,7 @@ func normalizeModelPrefix(prefix string) string {
 
 // looksLikeBcrypt returns true if the provided string appears to be a bcrypt hash.
 func looksLikeBcrypt(s string) bool {
-	return len(s) > 4 && (s[:4] == "$2a$" || s[:4] == "$2b$" || s[:4] == "$2y$")
+	return len(s) >= 60 && (s[:4] == "$2a$" || s[:4] == "$2b$" || s[:4] == "$2y$")
 }
 
 // NormalizeHeaders trims header keys and values and removes empty pairs.

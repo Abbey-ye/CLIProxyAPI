@@ -122,7 +122,11 @@ func (h *Handler) SetAuthManager(manager *coreauth.Manager) {
 }
 
 // SetLocalPassword configures the runtime-local password accepted for localhost requests.
-func (h *Handler) SetLocalPassword(password string) { h.localPassword = password }
+func (h *Handler) SetLocalPassword(password string) {
+	h.mu.Lock()
+	h.localPassword = password
+	h.mu.Unlock()
+}
 
 // SetLogDirectory updates the directory where main.log should be looked up.
 func (h *Handler) SetLogDirectory(dir string) {
@@ -187,7 +191,10 @@ func (h *Handler) AuthenticateManagementKey(clientIP string, localClient bool, p
 		return false, http.StatusForbidden, "remote management disabled"
 	}
 
+	h.mu.Lock()
 	cfg := h.cfg
+	localPassword := h.localPassword
+	h.mu.Unlock()
 	var (
 		allowRemote bool
 		secretHash  string
@@ -255,8 +262,8 @@ func (h *Handler) AuthenticateManagementKey(clientIP string, localClient bool, p
 	}
 
 	if localClient {
-		if lp := h.localPassword; lp != "" {
-			if subtle.ConstantTimeCompare([]byte(provided), []byte(lp)) == 1 {
+		if localPassword != "" {
+			if subtle.ConstantTimeCompare([]byte(provided), []byte(localPassword)) == 1 {
 				reset()
 				return true, 0, ""
 			}
