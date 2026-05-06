@@ -112,7 +112,7 @@ func extractBearerToken(header string) string {
 		return header
 	}
 	if strings.ToLower(parts[0]) != "bearer" {
-		return header
+		return ""
 	}
 	return strings.TrimSpace(parts[1])
 }

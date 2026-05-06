@@ -142,7 +142,12 @@ func (s *session) request(ctx context.Context, msg Message) (<-chan Message, err
 	if msg.ID == "" {
 		return nil, fmt.Errorf("wsrelay: message id is required")
 	}
-	if _, loaded := s.pending.LoadOrStore(msg.ID, &pendingRequest{ch: make(chan Message, 8)}); loaded {
+	select {
+	case <-s.closed:
+		return nil, errClosed
+	default:
+	}
+	if _, loaded := s.pending.LoadOrStore(msg.ID, &pendingRequest{ch: make(chan Message, 64)}); loaded {
 		return nil, fmt.Errorf("wsrelay: duplicate message id %s", msg.ID)
 	}
 	value, _ := s.pending.Load(msg.ID)
